@@ -2,6 +2,8 @@
 
 Automated deployment for media automation.
 
+![Weavescope](assets/img/weavescope.png)
+
 ## Containers
 
 #### Transmission
