@@ -1,0 +1,151 @@
+version: '2.1'
+services:
+
+  plex:
+    container_name: plex
+    image: plexinc/pms-docker:plexpass
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - TZ=${TIME_ZONE}
+      - PLEX_CLAIM=${PLEX_CLAIM_TOKEN}
+      - ADVERTISE_IP=http://${ADVERTISE_IP}:32400/
+      - PLEX_UID=${AUTOMATION_UID}
+      - PLEX_GID=${AUTOMATION_GID}
+      - ACCESS_NETWORKS=${PLEX_ALLOWED_NETWORKS}
+    hostname: bluedream-cinema
+    volumes:
+      - plex-config:/config
+      - /tmp/media/transcode:/transcode
+      - /media:/data
+
+  transmission:
+    container_name: transmission
+    image: dperson/transmission
+    restart: unless-stopped
+    depends_on:
+      - plex
+    network_mode: host
+    environment:
+      - TZ=${TIME_ZONE}
+      - TR_IDLE_SEEDING_LIMIT_ENABLED=true
+      - TR_IDLE_SEEDING_LIMIT=600
+      - TR_RATIO_LIMIT_ENABLED=true
+      - TR_RATIO_LIMIT=4
+      - TR_DOWNLOAD_DIR=/downloads
+      - TR_INCOMPLETE_DIR_ENABLED=false
+      - TR_RENAME_PARTIAL_FILES=true
+      - TR_DHT_ENABLED=false
+      - TR_PEX_ENABLED=false
+      - USERID=${AUTOMATION_UID}
+      - GROUPID=${AUTOMATION_GID}
+    volumes:
+      - transmission-config:/var/lib/transmission-daemon/info
+      - /media/downloads/complete:/downloads
+      - /tmp/media/downloads:/var/lib/transmission-daemon/incomplete
+
+  sonarr:
+    container_name: sonarr
+    image: linuxserver/sonarr
+    restart: unless-stopped
+    depends_on:
+      - transmission
+      - plex
+    network_mode: host
+    environment:
+      - TZ=${TIME_ZONE}
+      - PUID=${AUTOMATION_UID}
+      - PGID=${AUTOMATION_GID}
+    volumes:
+      - sonarr-config:/config
+      - /media/tv:/tv
+      - /media/downloads/complete:/downloads
+
+  radarr:
+    container_name: radarr
+    image: linuxserver/radarr
+    restart: unless-stopped
+    depends_on:
+      - transmission
+      - plex
+    network_mode: host
+    environment:
+      - TZ=${TIME_ZONE}
+      - PUID=${AUTOMATION_UID}
+      - PGID=${AUTOMATION_GID}
+    volumes:
+      - radarr-config:/config
+      - /media/movies:/movies
+      - /media/downloads/complete:/downloads
+
+  jackett:
+    container_name: jackett
+    image: linuxserver/jackett
+    restart: unless-stopped
+    depends_on:
+      - sonarr
+      - radarr
+    network_mode: host
+    environment:
+      - TZ=${TIME_ZONE}
+      - PUID=${AUTOMATION_UID}
+      - PGID=${AUTOMATION_GID}
+    volumes:
+      - jackett-config:/config
+      - /media/downloads/blackhole:/downloads
+
+  ombi:
+    container_name: ombi
+    image: linuxserver/ombi
+    restart: unless-stopped
+    depends_on:
+      - plex
+    network_mode: host
+    environment:
+      - TZ=${TIME_ZONE}
+      - PUID=${AUTOMATION_UID}
+      - PGID=${AUTOMATION_GID}
+    volumes:
+      - ombi-config:/config
+
+  scope:
+    container_name: weavescope
+    image: weaveworks/scope
+    network_mode: host
+    pid: host
+    privileged: true
+    labels:
+      - "works.weave.role=system"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+    command:
+      - "--probe.docker=true"
+
+  nginx:
+    container_name: nginx
+    image: linuxserver/nginx
+    environment:
+      - TZ=${TIME_ZONE}
+      - PUID=${AUTOMATION_UID}
+      - PGID=${AUTOMATION_GID}
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - nginx-config:/config
+
+volumes:
+  transmission-config:
+    driver: local
+  plex-config:
+    driver: local
+  sonarr-config:
+    driver: local
+  radarr-config:
+    driver: local
+  jackett-config:
+    driver: local
+  ombi-config:
+    driver: local
+  nginx-config:
+    driver: local
