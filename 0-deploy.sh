@@ -3,29 +3,21 @@
 # Deploys all media automation and prepares environment
 set -eou pipefail
 
-# Question #1
-PS3='Have you modified bootstrap.env? '  
-options=("[Y]es" "[N]o" "[Q]uit")  
-select opt in "${options[@]}"  
-do  
-    case $opt in
-        "Y")
-            # shellcheck source=/dev/null
-            source ./bootstrap.env; 
-            echo; echo "Bootstrapped Environment Variables"; echo
-            ;;
-        "N")
-            echo; echo "Please modify bootstrap.env first."; echo
-            break
-            ;;
-        "Q")
-            break
-            ;;
-        *) echo invalid option;;
-    esac
-done
+# Verify environment variables set
+if [[ 
+    -z "$TIME_ZONE" ||
+    -z "$PLEX_CLAIM_TOKEN" ||
+    -z "$AUTOMATION_UID" ||
+    -z "$AUTOMATION_GID" ||
+    -z "$PLEX_ALLOWED_NETWORKS" ||
+    -z "$ADVERTISE_IP"
+]]; then
+    echo "Please run this script using Summon:"
+    echo -e "\t$ summon -p ring.py bash -s 0-deploy.sh\n"
+    exit 1
+fi
 
-# Question #2
+# Question #1
 PS3='Have you modified nginx.conf? '  
 options=("[Y]es" "[N]o" "[Q]uit")  
 select opt in "${options[@]}"  
@@ -35,46 +27,46 @@ do
             echo "nginx.conf confirmed as modified.  Continuing..."
             ;;
         "N")
-            echo; echo "Please modify nginx.conf first."; echo
-            break
+            echo -e "\nPlease modify nginx.conf first.\n"
+            exit 1
             ;;
         "Q")
-            break
+            exit 1
             ;;
         *) echo invalid option;;
     esac
 done
 
-echo; echo "Checking for Docker..."; echo
+echo -e "\n==> Checking for Docker...\n"
 
-if command -v docker > /dev/null ; then
-    echo "Docker is installed."; echo
+if [[ -z "$(command -v docker)" ]]; then
+    echo "Docker is installed."
 else
-    echo "Docker not found.  Installing..."; echo
+    echo "Docker not found.  Installing..."
     curl -fsSL get.docker.com | sh
     sudo usermod -aG docker $USER 
     newgrp docker
 fi
 
-echo; echo "Checking for Docker-Compose..."; echo
+echo -e "\n==> Checking for Docker-Compose...\n"
 
-if command -v docker-compose > /dev/null ; then
-    echo "Docker-Compose is installed."; echo
+if [[ -z "$(command -v docker-compose)" ]]; then
+    echo "Docker-Compose is installed."
 else
-    echo "Docker-Compose not found.  Installing..."; echo
-    sudo curl -L https://github.com/docker/compose/releases/download/1.21.2/docker-compose-"$(uname -s)"-"$(uname -m)" -o /usr/local/bin/docker-compose
+    echo "Docker-Compose not found.  Installing..."
+    sudo curl -L https://github.com/docker/compose/releases/download/1.26.1/docker-compose-"$(uname -s)"-"$(uname -m)" -o /usr/local/bin/docker-compose
     sudo chmod +x /usr/local/bin/docker-compose
 fi
 
-echo; echo "Bringing up containers using Docker-Compose..."
+echo -e "\n==> Bringing up containers using Docker-Compose...\n"
 
 docker-compose up -d
 
-echo; echo "Copying NGINX configuration..."; echo
+echo -e "\n==> Copying NGINX configuration...\n"
 
-cp ./nginx.conf /opt/nginx/nginx/nginx.conf
+docker cp ./nginx/nginx.conf /etc/nginx/nginx.conf
 
-echo; echo "Restarting NGINX container..."; echo
+echo -e "\n==> Restarting NGINX container...\n"
 
 docker restart nginx
 
@@ -84,4 +76,4 @@ do
     sleep 0.5
 done
 
-echo; echo "All containers deployed successfully!"; echo
+echo -e "\n==> All containers deployed successfully!\n"
